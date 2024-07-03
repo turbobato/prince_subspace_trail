@@ -166,7 +166,6 @@ def save_list(in_list,filename):
     res = []
     for l in in_list :
         res.append([list(map(vec2int,x.basis())) for x in l])
-    print(res)
     save(res,filename)
 
 def load_list(filename):
