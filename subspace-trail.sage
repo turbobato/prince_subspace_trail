@@ -2,6 +2,7 @@ from sage.all import *
 from sage.crypto.sbox import SBox
 from sage.misc.persist import SagePickler
 from sage.misc.persist import SageUnpickler
+from tqdm import tqdm
 
 S = SBox(0xb, 0xf, 0x3, 0x2, 0xa, 0xc, 0x9, 0x1, 0x6, 0x7, 0x8, 0x0, 0xe, 0x5, 0xD, 0x4)
 
@@ -127,6 +128,52 @@ def one_round_trails(linear_layer,k):
         subspaces.append([U,V])
     return subspaces
 
+def mwe(linear_layer):
+    vs = VectorSpace(GF(2),4)
+    sp = VectorSpace(GF(2),64)
+    zero_space = vs.subspace([])
+    full_space = vs.subspace(identity_matrix(4))
+    ls = [zero_space if i != 0 else full_space for i in range(16)]
+    U = reduce(lambda a,b : a.direct_sum(b),ls)
+    v_basis = (linear_layer * U.basis_matrix().T).columns()
+    Vpr = sp.subspace(v_basis)  
+    print("base\n",v_basis,"\n","subspace\n",Vpr,"\n","basis\n",Vpr.basis())
+    return (v_basis, Vpr)
+
+
+def trails_no_lin_struc(linear_layer,k):
+    trails = []
+    n = Integer(linear_layer.ncols()/k)
+    space = VectorSpace(GF(2),n*k)
+    for u in range(1,1<<k):
+        trail = []
+        # compute U from active SBoxes
+        u_bits = Integer(u).digits(base=2,padto=k)
+        U = active_sboxes_to_subspace(u_bits,n)
+        trail.append((U,U))
+
+        V = U
+        
+        while V.dimension() != k*n :
+            # map linear layer over basis vectors
+            v_basis = (linear_layer * V.basis_matrix().T).columns()
+            Vpr = space.subspace(v_basis)  
+            # reduce basis to one vector that has a one entry
+            # iff at least one of the basis vectors has a one
+            # entry at the same position
+            v_bits = list(map(lambda bi : reduce(lambda a,b : int(a) | int(b),bi),zip(*v_basis)))
+
+            # reduce bits to one per sbox only
+            v_bits = [1 if v_bits[i*n :(i+1)*n] != [0]*n else 0 for i in range(k)]
+
+            # compute V from active SBoxes
+            V = active_sboxes_to_subspace(v_bits,n)
+            # print("base\n",v_basis,"\n","subspace\n",Vpr,"\n","basis\n",Vpr.basis())
+            trail.append((V,Vpr))
+        trails.append(trail)
+    return trails
+
+
 def algorithm3(f,k,n):
     """
     Return the set of all subspace trails containing W_{i , alpha }
@@ -147,7 +194,6 @@ def algorithm3(f,k,n):
     for i , alpha in product(range(1,k+1),range(1,1<<n)):
         w_i_alpha = vector(GF(2), [0]*(n*(k-i)) + to_n_bits(n, alpha) + [0]*(n*(i-1)))
         W_i_alpha = vs.subspace([w_i_alpha])
-        
         trails.append(compute_trail(f, W_i_alpha, dim))
     
     return trails
@@ -166,7 +212,6 @@ def save_list(in_list,filename):
     res = []
     for l in in_list :
         res.append([list(map(vec2int,x.basis())) for x in l])
-    print(res)
     save(res,filename)
 
 def load_list(filename):
@@ -177,13 +222,33 @@ def load_list(filename):
         res.append([sp.subspace((list(map(int2vec,x)))) for x in l])
     return res
 
-subsp = one_round_trails(M,16)
+# subsp = one_round_trails(M,16)
 
-save_list(subsp,"one_round.sobj")
+# save_list(subsp,"one_round.sobj")
 
-trails = []
-for U, V in subsp :
-    trails.append([U,V]+compute_trail(round_for_diff,V,64))
+# trails = []
+# for U, V in subsp :
+#     trails.append(compute_trail(round_for_diff,U,64))
 
-save(trails,'trails.sobj')
+#print(compute_trail(round_for_diff,sp.subspace(sp.basis()[0:4]),64))
+
+res = trails_no_lin_struc(M,16)
+
+trails_short = [[couple[0] for couple in trail] for trail in res]
+trails_long = [[couple[1] for couple in trail] for trail in res]
+
+save_list(trails_short,"trail_shorts.sobj")
+save_list(trails_long,"trails_long.sobj")
+
+# DEBUGGING
+# u = 1
+# u_bits = Integer(u).digits(base=2,padto=16)
+# U = active_sboxes_to_subspace(u_bits,4)
+# print((M*(U.basis()[0])).parent())
+# print((M * U.basis_matrix().T).columns()[0].parent())
+# print(v_basis)
+#print(sp.subspace(list(map(subsp,[(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)])))==Vpr)
+# basis = [(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0), (0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)]
+# print(sp.subspace(basis))
+# END OF DEBUGGING
 
