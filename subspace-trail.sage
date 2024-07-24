@@ -232,13 +232,29 @@ def load_list(filename):
 
 #print(compute_trail(round_for_diff,sp.subspace(sp.basis()[0:4]),64))
 
-res = trails_no_lin_struc(M,16)
+mode = 2
 
-trails_short = [[couple[0] for couple in trail] for trail in res]
-trails_long = [[couple[1] for couple in trail] for trail in res]
+def main(): 
+    # generate trails
+    if mode == 1 :
+        res = trails_no_lin_struc(M,16)
 
-save_list(trails_short,"trail_shorts.sobj")
-save_list(trails_long,"trails_long.sobj")
+        trails_short = [[couple[0] for couple in trail] for trail in res]
+        trails_long = [[couple[1] for couple in trail] for trail in res]
+
+        save_list(trails_short,"trail_shorts.sobj")
+        save_list(trails_long,"trails_long.sobj")
+    # analyse trails
+    elif mode == 2 :
+        trails_short = load_list("trail_shorts.sobj")
+        trails_long = load_list("trails_long.sobj")
+        print("c chargé")
+        m = max([len(x) for x in trails_long])
+        print(m)
+    
+
+if __name__ == "__main__" :
+    main()
 
 # DEBUGGING
 # u = 1
